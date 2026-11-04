@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>股票字典 - 按拼音首字母排列</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #0d1117; color: #e6edf3;
+  }
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px; background: #161b22; border-bottom: 1px solid #30363d;
+    position: sticky; top: 0; z-index: 20;
+  }
+  .topbar .title { font-size: 18px; font-weight: 600; }
+  .topbar .title small { color: #8b949e; font-weight: 400; font-size: 13px; margin-left: 8px; }
+  .topbar a.back { color: #58a6ff; text-decoration: none; font-size: 14px; }
+  .topbar a.back:hover { text-decoration: underline; }
+  .letter-nav {
+    display: flex; gap: 4px; overflow-x: auto; padding: 4px 0;
+    max-width: 480px;
+  }
+  .letter-nav a {
+    flex: 0 0 auto; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+    background: #21262d; color: #8b949e; border-radius: 4px; text-decoration: none; font-size: 13px; font-weight: 600;
+  }
+  .letter-nav a:hover { background: #238636; color: #fff; }
+
+  .layout { display: flex; }
+  .dict-body {
+    flex: 1; padding: 20px 24px 40px;
+    max-height: calc(100vh - 110px); overflow-y: auto;
+  }
+  .letter-group { margin-bottom: 28px; }
+  .letter-group h2 {
+    font-size: 20px; color: #58a6ff; margin-bottom: 12px;
+    display: flex; align-items: center; gap: 10px; scroll-margin-top: 120px;
+  }
+  .letter-group h2::after {
+    content: ""; flex: 1; height: 1px; background: #21262d;
+  }
+  .letter-group .count { font-size: 12px; color: #8b949e; font-weight: 400; }
+  .stock-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px;
+  }
+  .stock-cell {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 12px; background: #161b22; border: 1px solid #21262d;
+    border-radius: 6px; text-decoration: none; color: #e6edf3;
+    transition: border-color .15s;
+  }
+  .stock-cell:hover { border-color: #58a6ff; }
+  .stock-cell .name { font-size: 14px; }
+  .stock-cell .code { font-size: 12px; color: #8b949e; font-variant-numeric: tabular-nums; }
+
+  .dict-scroll::-webkit-scrollbar { width: 8px; }
+  .dict-scroll::-webkit-scrollbar-track { background: #0d1117; }
+  .dict-scroll::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+  .dict-scroll::-webkit-scrollbar-thumb:hover { background: #58a6ff; }
+
+  .side-rail {
+    position: sticky; top: 110px; height: fit-content;
+    display: flex; flex-direction: column; gap: 2px;
+    padding: 12px 6px; margin: 20px 0;
+    max-height: 70vh; overflow-y: auto;
+  }
+  .side-rail a {
+    width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
+    color: #8b949e; text-decoration: none; font-size: 12px; font-weight: 600; border-radius: 4px;
+  }
+  .side-rail a:hover, .side-rail a.active { background: #238636; color: #fff; }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="title">📖 股票字典<small>共 {{ total }} 只 · 按拼音首字母排列</small></div>
+    <div style="display:flex;align-items:center;gap:16px;">
+      <div class="letter-nav">
+        {% for letter, items in ordered %}
+        <a href="#L{{ letter }}">{{ letter }}</a>
+        {% endfor %}
+      </div>
+      <a class="back" href="/">← 返回首页</a>
+    </div>
+  </div>
+
+  <div class="layout">
+    <div class="dict-body dict-scroll" id="dict-body">
+      {% for letter, items in ordered %}
+      <div class="letter-group" id="L{{ letter }}">
+        <h2>{{ letter if letter != "?" else "其他" }} <span class="count">{{ items|length }} 只</span></h2>
+        <div class="stock-grid">
+          {% for s in items %}
+          <a class="stock-cell" href="/query?q={{ s.name }}">
+            <span class="name">{{ s.name }}</span>
+            <span class="code">{{ s.symbol }}</span>
+          </a>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="side-rail" id="side-rail">
+      {% for letter, items in ordered %}
+      <a href="#L{{ letter }}" data-letter="{{ letter }}">{{ letter if letter != "?" else "?" }}</a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    const body = document.getElementById("dict-body");
+    const railLinks = document.querySelectorAll("#side-rail a");
+    const topbarLinks = document.querySelectorAll(".letter-nav a");
+
+    // 滚动时高亮当前字母
+    const groups = document.querySelectorAll(".letter-group");
+    function updateActive() {
+      let current = "";
+      groups.forEach(function (g) {
+        const rect = g.getBoundingClientRect();
+        if (rect.top < 150) {
+          current = g.id;
+        }
+      });
+      railLinks.forEach(function (a) {
+        a.classList.toggle("active", a.getAttribute("href") === "#" + current);
+      });
+      topbarLinks.forEach(function (a) {
+        a.style.background = a.getAttribute("href") === "#" + current ? "#238636" : "";
+        a.style.color = a.getAttribute("href") === "#" + current ? "#fff" : "";
+      });
+    }
+    body.addEventListener("scroll", updateActive);
+    updateActive();
+
+    // 点击字母平滑滚动
+    function scrollToLetter(id) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
+    railLinks.forEach(function (a) {
+      a.addEventListener("click", function (e) {
+        e.preventDefault();
+        scrollToLetter(a.getAttribute("href").slice(1));
+      });
+    });
+    topbarLinks.forEach(function (a) {
+      a.addEventListener("click", function (e) {
+        e.preventDefault();
+        scrollToLetter(a.getAttribute("href").slice(1));
+      });
+    });
+
+    // 键盘 A-Z 快速跳转
+    document.addEventListener("keydown", function (e) {
+      if (e.target.tagName === "INPUT") return;
+      const k = e.key.toUpperCase();
+      if (/^[A-Z]$/.test(k)) {
+        scrollToLetter("L" + k);
+      }
+    });
+  })();
+  </script>
+</body>
+</html>

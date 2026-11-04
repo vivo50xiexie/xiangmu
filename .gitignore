@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 系统与编辑器
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# 运行时产物
+*.log
+sim_data.json
+watchlist.json
+_sim_test_tmp.json
+_v.py
+
+# 本地工作笔记 / 临时调试工具（不属于项目本身）
+CHECKPOINT.md
+_probe2.py
+tools/

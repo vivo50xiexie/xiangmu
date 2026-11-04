@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>股票辅助查询</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #0d1117; color: #e6edf3;
+    min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+  }
+  .card {
+    background: #161b22; border: 1px solid #30363d; border-radius: 12px;
+    padding: 36px 48px; max-width: 480px; width: 90%;
+    box-shadow: 0 8px 24px rgba(0,0,0,.4);
+  }
+  h1 { font-size: 22px; margin-bottom: 6px; }
+  .sub { color: #8b949e; font-size: 13px; margin-bottom: 24px; }
+  form { display: flex; gap: 10px; }
+  input {
+    flex: 1; padding: 12px 14px; font-size: 15px;
+    background: #0d1117; color: #e6edf3;
+    border: 1px solid #30363d; border-radius: 8px; outline: none;
+  }
+  input:focus { border-color: #58a6ff; }
+  button {
+    padding: 12px 22px; font-size: 15px; cursor: pointer;
+    background: #238636; color: #fff; border: none; border-radius: 8px;
+    transition: background .15s;
+  }
+  button:hover { background: #2ea043; }
+  .err { color: #f85149; font-size: 13px; margin-top: 14px; text-align: center; }
+  .hint { color: #8b949e; font-size: 12px; margin-top: 18px; text-align: center; }
+  .hint b { color: #58a6ff; }
+
+  /* 推荐专栏 */
+  .recommend {
+    margin-top: 22px;
+    border-top: 1px solid #21262d;
+    padding-top: 18px;
+  }
+  .recommend h2 {
+    font-size: 14px; font-weight: 600; color: #e6edf3;
+    display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
+  }
+  .recommend .sub-note { color: #8b949e; font-size: 11px; margin-bottom: 12px; }
+  .rec-scroll {
+    max-height: 220px; overflow-y: auto;
+    border: 1px solid #21262d; border-radius: 8px;
+  }
+  .rec-scroll::-webkit-scrollbar { width: 6px; }
+  .rec-scroll::-webkit-scrollbar-track { background: #0d1117; }
+  .rec-scroll::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+  .rec-scroll::-webkit-scrollbar-thumb:hover { background: #58a6ff; }
+  .rec-item {
+    display: grid;
+    grid-template-columns: 36px 1fr 72px 72px;
+    align-items: center;
+    padding: 10px 12px;
+    border-bottom: 1px solid #161b22;
+    text-decoration: none; color: #e6edf3;
+    transition: background .15s;
+  }
+  .rec-item:last-child { border-bottom: none; }
+  .rec-item:hover { background: #21262d; }
+  .rec-rank {
+    font-size: 14px; font-weight: 700; color: #8b949e;
+    text-align: center;
+  }
+  .rec-item:nth-child(1) .rec-rank,
+  .rec-item:nth-child(2) .rec-rank,
+  .rec-item:nth-child(3) .rec-rank { color: #58a6ff; }
+  .rec-name { font-size: 14px; font-weight: 500; }
+  .rec-name small { color: #8b949e; font-weight: 400; margin-left: 6px; font-size: 11px; }
+  .rec-price { font-size: 14px; text-align: right; font-variant-numeric: tabular-nums; }
+  .rec-pct { font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
+  .rec-up { color: #f85149; }
+  .rec-down { color: #3fb950; }
+  .rec-empty {
+    color: #8b949e; font-size: 12px; padding: 16px 12px; text-align: center;
+  }
+  .board-tabs {
+    display: flex; gap: 8px; margin-bottom: 12px;
+  }
+  .board-tab {
+    flex: 1; padding: 8px 10px; font-size: 13px; cursor: pointer;
+    background: #21262d; color: #8b949e; border: 1px solid #30363d;
+    border-radius: 6px; text-align: center; transition: all .15s;
+  }
+  .board-tab:hover { background: #2d333b; color: #e6edf3; }
+  .board-tab.active { background: #238636; color: #fff; border-color: #238636; }
+
+  /* 搜索联想下拉 */
+  .suggest-list {
+    position: absolute; left: 0; right: 0; top: calc(100% + 4px);
+    background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.5);
+    max-height: 280px; overflow-y: auto;
+    z-index: 10; display: none;
+  }
+  .suggest-list.show { display: block; }
+  .suggest-list::-webkit-scrollbar { width: 6px; }
+  .suggest-list::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+  .suggest-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px; cursor: pointer;
+    border-bottom: 1px solid #21262d; font-size: 14px;
+  }
+  .suggest-item:last-child { border-bottom: none; }
+  .suggest-item:hover, .suggest-item.active { background: #21262d; }
+  .suggest-item .s-name { color: #e6edf3; }
+  .suggest-item .s-code { color: #8b949e; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .suggest-empty { padding: 12px 14px; color: #8b949e; font-size: 13px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>📈 股票辅助查询</h1>
+    <p class="sub">输入 A 股代码或名称，获取实时行情、走势与公司新闻</p>
+    <form action="/query" method="get" id="search-form">
+      <div style="position:relative; flex:1;">
+        <input type="text" name="q" id="search-input" placeholder="输入代码或名称，如 600519 / 贵州茅台"
+               required autocomplete="off">
+        <div id="suggest-list" class="suggest-list"></div>
+      </div>
+      <button type="submit">查询</button>
+    </form>
+    {% if error %}<div class="err">{{ error }}</div>{% endif %}
+    <p class="hint">示例：输入 <b>600519</b> 或 <b>贵州茅台</b> · <b>000001</b> 或 <b>平安银行</b> · <b>300750</b> 或 <b>宁德时代</b></p>
+    <p style="margin-top:14px;text-align:center;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+      <a href="/dict" style="color:#58a6ff;text-decoration:none;font-size:13px;border:1px solid #30363d;padding:6px 14px;border-radius:6px;background:#21262d;">
+        📖 按首字母查全部股票
+      </a>
+      <a href="/sim" style="text-decoration:none;font-size:13px;border:1px solid #30363d;padding:6px 14px;border-radius:6px;background:#21262d;color:#e6edf3;">
+        📈 模拟炒股{% if sim_overview %}<small style="color:#8b949e;margin-left:6px">总资产 ¥{{ "{:,.0f}".format(sim_overview.total) }} · 盈亏 {{ sim_overview.pnl }}%</small>{% endif %}
+      </a>
+    </p>
+
+    <div class="recommend">
+      <h2>⭐ 我的自选</h2>
+      <div class="sub-note">在个股详情页点「☆ 加入自选」即可在此跟踪 · 实时价自动刷新</div>
+      {% if watchlist %}
+      <div class="rec-scroll" style="max-height:200px">
+        {% for w in watchlist %}
+        <a class="rec-item watch-item" href="/query?q={{ w.symbol }}" data-symbol="{{ w.symbol }}">
+          <span class="rec-rank" style="font-size:12px">#{{ loop.index }}</span>
+          <span class="rec-name">{{ w.name }}<small>{{ w.symbol }}</small></span>
+          <span class="rec-price w-price">{% if w.price %}{{ "%.2f"|format(w.price) }}{% else %}–{% endif %}</span>
+          <span class="rec-pct w-pct {% if w.pct and w.pct > 0 %}rec-up{% elif w.pct and w.pct < 0 %}rec-down{% endif %}">
+            {% if w.pct is not none %}{% if w.pct > 0 %}+{% endif %}{{ w.pct }}%{% else %}–{% endif %}
+          </span>
+        </a>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="rec-empty" style="border:1px dashed #30363d;border-radius:8px;">还没有自选股 —— 查询任意股票后点页面上的「☆ 加入自选」</div>
+      {% endif %}
+    </div>
+
+    <div class="recommend">
+      <h2>📌 今日热点榜</h2>
+      <div class="sub-note">数据来源：腾讯财经 · 60 只热门股实时计算 · 自动更新（缓存 10 分钟）· 点击可直接查询</div>
+      <div class="board-tabs">
+        <button class="board-tab active" data-board="gain">🔴 涨幅榜</button>
+        <button class="board-tab" data-board="lose">🟢 跌幅榜</button>
+        <button class="board-tab" data-board="volume">💰 成交额</button>
+        <button class="board-tab" data-board="turnover">🔄 换手率</button>
+      </div>
+      {% for board_name in ["gain","lose","volume","turnover"] %}
+      <div class="rec-scroll board-panel" data-board="{{ board_name }}"
+           style="{{ 'display:block;' if board_name == 'gain' else '' }}">
+        {% set board = recommend.get(board_name, []) if recommend else [] %}
+        {% if board %}
+          {% for r in board %}
+          <a class="rec-item" href="/query?q={{ r.name }}">
+            <span class="rec-rank">{{ r.rank }}</span>
+            <span class="rec-name">{{ r.name }}<small>{{ r.symbol }}</small></span>
+            <span class="rec-price">{{ "%.2f"|format(r.price) }}</span>
+            <span class="rec-pct {% if r.pct > 0 %}rec-up{% elif r.pct < 0 %}rec-down{% else %}{% endif %}">
+              {% if r.pct > 0 %}+{% endif %}{{ r.pct }}%
+            </span>
+          </a>
+          {% endfor %}
+        {% else %}
+        <div class="rec-empty">暂无数据（数据源延迟，稍后刷新）</div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    const input = document.getElementById("search-input");
+    const list = document.getElementById("suggest-list");
+    let timer = null;
+
+    function close() {
+      list.classList.remove("show");
+      list.innerHTML = "";
+    }
+
+    function render(items) {
+      list.innerHTML = "";
+      if (!items.length) {
+        list.innerHTML = '<div class="suggest-empty">未找到匹配的股票</div>';
+        list.classList.add("show");
+        return;
+      }
+      items.forEach(function (it) {
+        const div = document.createElement("div");
+        div.className = "suggest-item";
+        div.innerHTML =
+          '<span class="s-name">' + it.name + "</span>" +
+          '<span class="s-code">' + it.symbol + "</span>";
+        div.addEventListener("mousedown", function (e) {
+          e.preventDefault();
+          input.value = it.name;
+          close();
+          window.location.href = "/query?q=" + encodeURIComponent(it.name);
+        });
+        list.appendChild(div);
+      });
+      list.classList.add("show");
+    }
+
+    input.addEventListener("input", function () {
+      const q = input.value.trim();
+      clearTimeout(timer);
+      if (q.length < 1) { close(); return; }
+      timer = setTimeout(function () {
+        fetch("/suggest?q=" + encodeURIComponent(q))
+          .then(function (r) { return r.json(); })
+          .then(render)
+          .catch(close);
+      }, 200);
+    });
+
+    document.addEventListener("click", function (e) {
+      if (e.target !== input && !list.contains(e.target)) close();
+    });
+
+    let activeIdx = -1;
+    input.addEventListener("keydown", function (e) {
+      const items = list.querySelectorAll(".suggest-item");
+      if (!list.classList.contains("show") || !items.length) return;
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        activeIdx = (activeIdx + 1) % items.length;
+        items.forEach(function (el, i) { el.classList.toggle("active", i === activeIdx); });
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        activeIdx = (activeIdx - 1 + items.length) % items.length;
+        items.forEach(function (el, i) { el.classList.toggle("active", i === activeIdx); });
+      } else if (e.key === "Enter" && activeIdx >= 0) {
+        e.preventDefault();
+        items[activeIdx].dispatchEvent(new MouseEvent("mousedown", { cancelable: true }));
+      } else if (e.key === "Escape") {
+        close();
+      }
+    });
+
+    // 榜单切换
+    const tabs = document.querySelectorAll(".board-tab");
+    const panels = document.querySelectorAll(".board-panel");
+    tabs.forEach(function (tab) {
+      tab.addEventListener("click", function () {
+        const board = tab.dataset.board;
+        tabs.forEach(function (t) { t.classList.toggle("active", t === tab); });
+        panels.forEach(function (p) {
+          p.style.display = p.dataset.board === board ? "block" : "none";
+        });
+      });
+    });
+
+    // "/" 快捷键聚焦搜索框
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "/" && document.activeElement !== input &&
+          !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) {
+        e.preventDefault();
+        input.focus();
+      }
+    });
+
+    // 自选股实时价刷新（30 秒，直接批量调腾讯行情，失败保持原值）
+    (function () {
+      const items = Array.from(document.querySelectorAll(".watch-item"));
+      if (!items.length) return;
+      function prefix(c) {
+        return (c[0] === "6" || c[0] === "9") ? "sh" + c
+             : (c[0] === "4" || c[0] === "8") ? "bj" + c : "sz" + c;
+      }
+      function refresh() {
+        const url = "https://qt.gtimg.cn/q=" + items.map(function (el) {
+          return prefix(el.dataset.symbol);
+        }).join(",");
+        fetch(url).then(function (r) { return r.text(); }).then(function (text) {
+          const byCode = {};
+          text.split(";").forEach(function (line) {
+            if (line.indexOf("~") < 0) return;
+            const f = line.split("~");
+            const code = (f[2] || "").padStart(6, "0").slice(-6);
+            const price = parseFloat(f[3]), prev = parseFloat(f[4]);
+            if (code && isFinite(price) && isFinite(prev) && prev) {
+              byCode[code] = { price: price, pct: (price - prev) / prev * 100 };
+            }
+          });
+          items.forEach(function (el) {
+            const q = byCode[el.dataset.symbol];
+            if (!q) return;
+            const priceEl = el.querySelector(".w-price"), pctEl = el.querySelector(".w-pct");
+            priceEl.textContent = q.price.toFixed(2);
+            const p2 = Math.round(q.pct * 100) / 100;
+            pctEl.textContent = (p2 > 0 ? "+" : "") + p2 + "%";
+            pctEl.classList.toggle("rec-up", p2 > 0);
+            pctEl.classList.toggle("rec-down", p2 < 0);
+          });
+        }).catch(function () {});
+      }
+      refresh();
+      setInterval(refresh, 30000);
+    })();
+  })();
+  </script>
+</body>
+</html>

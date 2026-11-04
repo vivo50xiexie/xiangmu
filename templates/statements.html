@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>对账单 - 模拟炒股</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+         background: #0d1117; color: #e6edf3; }
+  a { color: #58a6ff; }
+  .topbar { display: flex; justify-content: space-between; align-items: center;
+            padding: 14px 24px; background: #161b22; border-bottom: 1px solid #30363d; }
+  .topbar .t { font-size: 18px; font-weight: 600; }
+  .topbar .t small { color: #8b949e; font-weight: 400; font-size: 13px; margin-left: 8px; }
+  .topbar .links { display: flex; gap: 14px; font-size: 13px; }
+
+  .wrap { max-width: 900px; margin: 0 auto; padding: 20px 24px 60px; }
+  h2 { font-size: 16px; margin: 18px 0 10px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px,1fr));
+           gap: 10px; margin-bottom: 8px; }
+  .card { background: #161b22; border: 1px solid #21262d; border-radius: 8px; padding: 12px 14px; }
+  .card .lbl { font-size: 12px; color: #8b949e; margin-bottom: 4px; }
+  .card .val { font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .up { color: #f85149; } .down { color: #3fb950; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #21262d; }
+  th { color: #8b949e; font-weight: 500; font-size: 12px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .side-buy { color: #f85149; font-weight: 600; }
+  .side-sell { color: #3fb950; font-weight: 600; }
+  .empty { color: #8b949e; font-size: 13px; padding: 12px 0; }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="t">🧾 对账单 <small>最近 {{ statements|length }} 笔成交（最多 100 笔）</small></div>
+    <div class="links">
+      <a href="/sim">← 返回交易</a>
+      <a href="/">首页</a>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="cards">
+      <div class="card"><div class="lbl">总资产</div>
+        <div class="val">¥{{ "{:,.2f}".format(overview.total) }}</div></div>
+      <div class="card"><div class="lbl">可用资金</div>
+        <div class="val">¥{{ "{:,.2f}".format(overview.cash) }}</div></div>
+      <div class="card"><div class="lbl">总盈亏</div>
+        <div class="val {% if overview.pnl > 0 %}up{% elif overview.pnl < 0 %}down{% endif %}">
+          {{ "+" if overview.pnl > 0 else "" }}{{ "{:,.2f}".format(overview.pnl) }}（{{ overview.pnl_pct }}%）</div></div>
+      <div class="card"><div class="lbl">成交笔数</div>
+        <div class="val">{{ overview.trade_count }}</div></div>
+    </div>
+
+    <h2>🧾 成交记录 <a href="/export/trades" style="font-size:12px;font-weight:400;margin-left:10px;">⬇ 导出 CSV</a></h2>
+    {% if statements %}
+    <table>
+      <tr><th>时间</th><th>方向</th><th>代码</th><th>名称</th>
+          <th class="num">价格</th><th class="num">数量</th><th class="num">金额</th><th class="num">手续费</th><th class="num">本笔盈亏</th></tr>
+      {% for t in statements %}
+      <tr>
+        <td>{{ t.time }}</td>
+        <td class="{{ 'side-buy' if t.side == 'buy' else 'side-sell' }}">
+          {{ '买入' if t.side == 'buy' else '卖出' }}</td>
+        <td><a href="/query?q={{ t.symbol }}">{{ t.symbol }}</a></td>
+        <td>{{ t.name }}</td>
+        <td class="num">{{ "%.4f"|format(t.price) }}</td>
+        <td class="num">{{ t.qty }}</td>
+        <td class="num">{{ "{:,.2f}".format(t.amount) }}</td>
+        <td class="num">{{ "%.2f"|format(t.fee) if t.fee is defined else "–" }}</td>
+        <td class="num {% if t.realized is defined and t.realized and t.realized > 0 %}up{% elif t.realized is defined and t.realized and t.realized < 0 %}down{% endif %}">
+          {% if t.realized is defined and t.realized is not none %}{{ "%+.2f"|format(t.realized) }}{% else %}–{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <div class="empty">还没有成交记录。<a href="/sim">去下单</a></div>
+    {% endif %}
+  </div>
+</body>
+</html>

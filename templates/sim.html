@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>模拟炒股 - 股票辅助网站</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+         background: #0d1117; color: #e6edf3; }
+  a { color: #58a6ff; }
+  .topbar { display: flex; justify-content: space-between; align-items: center;
+            padding: 14px 24px; background: #161b22; border-bottom: 1px solid #30363d; }
+  .topbar .t { font-size: 18px; font-weight: 600; }
+  .topbar .t small { color: #8b949e; font-weight: 400; font-size: 13px; margin-left: 8px; }
+  .topbar .links { display: flex; gap: 14px; font-size: 13px; }
+
+  .wrap { max-width: 960px; margin: 0 auto; padding: 20px 24px 60px; }
+
+  .flash { padding: 10px 14px; border-radius: 6px; margin-bottom: 16px; font-size: 14px; }
+  .flash.ok { background: rgba(35,134,54,.2); border: 1px solid #238636; color: #3fb950; }
+  .flash.err { background: rgba(248,81,73,.15); border: 1px solid #da3633; color: #f85149; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr));
+           gap: 10px; margin-bottom: 22px; }
+  .card { background: #161b22; border: 1px solid #21262d; border-radius: 8px; padding: 12px 14px; }
+  .card .lbl { font-size: 12px; color: #8b949e; margin-bottom: 4px; }
+  .card .val { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .up { color: #f85149; } .down { color: #3fb950; }
+
+  h2 { font-size: 16px; margin: 22px 0 10px; color: #e6edf3; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #21262d; }
+  th { color: #8b949e; font-weight: 500; font-size: 12px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  form.trade { display: grid; grid-template-columns: 110px 1fr 90px 100px 100px auto;
+               gap: 8px; align-items: end; background: #161b22;
+               border: 1px solid #21262d; border-radius: 8px; padding: 14px; }
+  form.trade label { display: block; font-size: 11px; color: #8b949e; margin-bottom: 4px; }
+  form.trade input { width: 100%; background: #0d1117; border: 1px solid #30363d;
+                     color: #e6edf3; border-radius: 5px; padding: 7px 9px; font-size: 14px; }
+  form.trade input:focus { outline: none; border-color: #58a6ff; }
+  .seg { display: flex; }
+  .seg label { margin: 0; display: flex; align-items: center; gap: 4px; font-size: 13px; color: #e6edf3; }
+  .seg input { width: auto; }
+  button { background: #238636; color: #fff; border: 0; border-radius: 6px;
+           padding: 9px 20px; font-size: 14px; cursor: pointer; }
+  button:hover { background: #2ea043; }
+  button.danger { background: #30363d; color: #f85149; }
+  button.danger:hover { background: #3d444d; }
+  .hint { font-size: 12px; color: #8b949e; margin-top: 8px; }
+  .hint b { color: #58a6ff; }
+  .empty { color: #8b949e; font-size: 13px; padding: 12px 0; }
+
+  @media (max-width: 760px) {
+    form.trade { grid-template-columns: 1fr 1fr; }
+    button { grid-column: span 2; }
+  }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="t">📈 模拟炒股 <small>初始 10 万 · 数据保存在本地 sim_data.json</small></div>
+    <div class="links">
+      <a href="/">首页</a>
+      <a href="/sim/statements">对账单</a>
+      <a href="/dict">字典</a>
+    </div>
+  </div>
+
+  <div class="wrap">
+    {% if flash_ok %}
+      <div class="flash ok">{{ flash_msg }}</div>
+    {% elif flash_msg %}
+      <div class="flash err">{{ flash_msg }}</div>
+    {% endif %}
+
+    <div class="cards">
+      <div class="card"><div class="lbl">总资产</div>
+        <div class="val">¥{{ "{:,.2f}".format(overview.total) }}</div></div>
+      <div class="card"><div class="lbl">可用资金</div>
+        <div class="val">¥{{ "{:,.2f}".format(overview.cash) }}</div></div>
+      <div class="card"><div class="lbl">持仓成本</div>
+        <div class="val">¥{{ "{:,.2f}".format(overview.market_value) }}</div></div>
+      <div class="card"><div class="lbl" id="pnl-lbl">总盈亏（按成本价）</div>
+        <div class="val {% if overview.pnl > 0 %}up{% elif overview.pnl < 0 %}down{% endif %}" id="pnl-val">
+          {{ "+" if overview.pnl > 0 else "" }}{{ "{:,.2f}".format(overview.pnl) }}
+          <small style="font-size:12px">（{{ overview.pnl_pct }}%）</small>
+        </div></div>
+      <div class="card"><div class="lbl">持仓 / 成交</div>
+        <div class="val">{{ overview.pos_count }} / {{ trade_count }}</div></div>
+    </div>
+
+    <h2>📝 下单</h2>
+    <form class="trade" method="post" action="/sim/trade" id="trade-form">
+      <div>
+        <label>代码</label>
+        <input name="symbol" id="f-symbol" pattern="\d{6}" placeholder="600519"
+               value="{{ prefill_symbol }}" required>
+      </div>
+      <div>
+        <label>名称（可选，用于记录）</label>
+        <input name="name" id="f-name" placeholder="贵州茅台" value="{{ prefill_name }}">
+      </div>
+      <div>
+        <label>方向</label>
+        <div class="seg">
+          <label><input type="radio" name="side" value="buy" checked> 买</label>
+          <label><input type="radio" name="side" value="sell"> 卖</label>
+        </div>
+      </div>
+      <div>
+        <label>价格（¥）<span id="guid-price" class="hint" style="display:inline-block;margin-left:4px;"></span></label>
+        <input name="price" id="f-price" type="number" step="0.01" min="0.01"
+               placeholder="{{ '%.2f'|format(prefill_price) if prefill_price else '1439.10' }}"
+               value="{{ '%.2f'|format(prefill_price) if prefill_price else '' }}" required>
+        {% if limit_lo and limit_hi %}
+        <div class="hint" style="margin-top:2px">涨跌停区间：{{ "%.2f"|format(limit_lo) }} ~ {{ "%.2f"|format(limit_hi) }}</div>
+        {% endif %}
+      </div>
+      <div>
+        <label>数量（股，整手）<span id="max-qty" class="hint" style="display:inline-block;margin-left:4px;"></span></label>
+        <input name="qty" id="f-qty" type="number" step="100" min="100" placeholder="100" required>
+      </div>
+      <button type="submit">成交</button>
+    </form>
+    <div class="hint" id="fee-preview"></div>
+    <div class="hint">
+      规则：交易必须整手（100 股整数倍）；<b>T+1</b>：当日买入次日才能卖出；资金不足（含费用）不能买；
+      价格必须在当日涨跌停区间内（主板 ±10%，创业板/科创板 ±20%）。
+      费用：佣金万 2.5（最低 5 元，双边）+ 印花税 0.05%（仅卖出）+ 过户费 0.001%（双边）。
+      指导价 = 该代码当前实时价（腾讯财经）；可买/可卖股数随资金、价格、持仓自动计算，仅供参考。
+    </div>
+
+    <script>
+    (function () {
+      const sym = document.getElementById("f-symbol");
+      const nameInp = document.getElementById("f-name");
+      const priceInp = document.getElementById("f-price");
+      const qtyInp = document.getElementById("f-qty");
+      const maxQtyEl = document.getElementById("max-qty");
+      const guidPriceEl = document.getElementById("guid-price");
+      const form = document.getElementById("trade-form");
+      const CASH = {{ overview.cash }};
+      const POS = {{ positions|tojson }};  // [{symbol, name, qty, ...}]
+
+      function buyableMax(price) {
+        if (!price || price <= 0) return 0;
+        return Math.floor(CASH / price / 100) * 100;
+      }
+      function updateMax() {
+        const p = parseFloat(priceInp.value) || 0;
+        const code = sym.value.trim();
+        const side = form.querySelector('input[name="side"]:checked').value;
+        if (side === "buy") {
+          const m = buyableMax(p);
+          maxQtyEl.textContent = m > 0 ? ("可买 " + m + " 股") : (p > 0 ? "资金不足" : "");
+        } else {
+          const pos = POS.find(function (x) { return x.symbol === code; });
+          maxQtyEl.textContent = pos ? ("可卖 " + pos.sellable + " 股" +
+              (pos.frozen ? "（今买 " + pos.frozen + " 股 T+1 冻结）" : "")) : "无持仓";
+        }
+      }
+
+      // 输入 6 位代码后自动拉取指导价 + 名称
+      let timer = null;
+      sym.addEventListener("input", function () {
+        clearTimeout(timer);
+        const code = sym.value.trim();
+        if (code.length !== 6) { guidPriceEl.textContent = ""; return; }
+        timer = setTimeout(function () {
+          fetch("/suggest?q=" + encodeURIComponent(code))
+            .then(function (r) { return r.json(); })
+            .then(function (items) {
+              if (items.length) {
+                guidPriceEl.textContent = "→ " + items[0].name;
+              }
+            }).catch(function () {});
+          // 拉指导价：用腾讯单股接口（通过 /query 太重，直接调公开接口）
+          const prefix = /^(\d)/.test(code) ? (code[0] >= "6" || code[0] >= "9" ? "sh" : "sz")
+                                            : (code[0] === "3" ? "sz" : "sh");
+          const full = prefix + code;
+          fetch("https://qt.gtimg.cn/q=" + full)
+            .then(function (r) { return r.text(); })
+            .then(function (t) {
+              const m = t.match(/="([^"]+)"/);
+              if (m) {
+                const f = m[1].split("~");
+                if (f.length > 3) {
+                  guidPriceEl.textContent = "指导价 " + f[3];
+                  if (f[1]) nameInp.value = f[1];
+                  if (!parseFloat(priceInp.value)) priceInp.value = f[3];
+                }
+              }
+            }).catch(function () {});
+        }, 300);
+      });
+
+      priceInp.addEventListener("input", updateMax);
+      qtyInp.addEventListener("input", updateMax);
+      form.querySelectorAll('input[name="side"]').forEach(function (r) {
+        r.addEventListener("change", updateMax);
+      });
+      updateMax();
+
+      // 手续费预估
+      const feeEl = document.getElementById("fee-preview");
+      function updateFee() {
+        const p = parseFloat(priceInp.value) || 0;
+        const q = parseInt(qtyInp.value) || 0;
+        const side = form.querySelector('input[name="side"]:checked').value;
+        if (!(p > 0 && q > 0)) { feeEl.textContent = ""; return; }
+        const amt = p * q;
+        const commission = Math.max(Math.round(amt * 0.00025 * 100) / 100, 5);
+        const transfer = Math.round(amt * 0.00001 * 100) / 100;
+        const stamp = side === "sell" ? Math.round(amt * 0.0005 * 100) / 100 : 0;
+        const fee = commission + transfer + stamp;
+        const total = side === "buy" ? amt + fee : amt - fee;
+        feeEl.textContent = "费用预估：" + (side === "buy" ? "买入" : "卖出") +
+          amt.toFixed(2) + " 元 → 佣金 " + commission.toFixed(2) +
+          " + 过户费 " + transfer.toFixed(2) + (stamp ? " + 印花税 " + stamp.toFixed(2) : "") +
+          " = " + fee.toFixed(2) + " 元，" +
+          (side === "buy" ? "总支出 " : "到账 ") + total.toFixed(2) + " 元";
+      }
+      [priceInp, qtyInp].forEach(function (el) { el.addEventListener("input", updateFee); });
+      form.querySelectorAll('input[name="side"]').forEach(function (r) {
+        r.addEventListener("change", updateFee);
+      });
+      updateFee();
+    })();
+
+    // 持仓实时盈亏：拉 /api/sim_pnl 刷新总资产卡片 + 持仓表
+    (function () {
+      const rows = {{ positions|tojson }};
+      if (!rows.length) return;
+      function fmt(n) { return n.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+      function refresh() {
+        fetch("/api/sim_pnl").then(function (r) { return r.json(); }).then(function (j) {
+          const tv = document.getElementById("pnl-val");
+          const tl = document.getElementById("pnl-lbl");
+          if (tv) {
+            tl.textContent = "总盈亏（按实时价）";
+            tv.innerHTML = (j.pnl > 0 ? "+" : "") + fmt(j.pnl) +
+              ' <small style="font-size:12px">（' + j.pnl_pct + '%）</small>';
+            tv.classList.toggle("up", j.pnl > 0);
+            tv.classList.toggle("down", j.pnl < 0);
+          }
+          rows.forEach(function (p) {
+            const live = j.positions.find(function (x) { return x.symbol === p.symbol; });
+            if (!live) return;
+            const priceTd = document.querySelector('[data-live-price="' + p.symbol + '"]');
+            const pnlTd = document.querySelector('[data-live-pnl="' + p.symbol + '"]');
+            if (priceTd) priceTd.textContent = live.price.toFixed(2);
+            if (pnlTd) {
+              pnlTd.innerHTML = (live.pnl > 0 ? "+" : "") + fmt(live.pnl) +
+                "（" + (live.pnl_pct > 0 ? "+" : "") + live.pnl_pct + "%）";
+              pnlTd.classList.toggle("up", live.pnl > 0);
+              pnlTd.classList.toggle("down", live.pnl < 0);
+            }
+          });
+        }).catch(function () {});
+      }
+      refresh();
+      setInterval(refresh, 30000);
+    })();
+    </script>
+
+    <h2>💼 当前持仓</h2>
+    {% if positions %}
+    <table>
+      <tr><th>代码</th><th>名称</th><th class="num">持仓(股)</th><th class="num">可卖</th><th class="num">成本价</th><th class="num">现价</th><th class="num">浮动盈亏</th><th></th></tr>
+      {% for p in positions %}
+      <tr>
+        <td><a href="/query?q={{ p.symbol }}">{{ p.symbol }}</a></td>
+        <td>{{ p.name }}</td>
+        <td class="num">{{ p.qty }}</td>
+        <td class="num">{% if p.frozen %}<span title="今日买入 {{ p.frozen }} 股，T+1 冻结"> {{ p.sellable }} </span>{% else %}{{ p.sellable }}{% endif %}</td>
+        <td class="num">{{ "%.4f"|format(p.cost) }}</td>
+        <td class="num" data-live-price="{{ p.symbol }}">–</td>
+        <td class="num" data-live-pnl="{{ p.symbol }}">–</td>
+        <td style="text-align:right"><a href="/sim?symbol={{ p.symbol }}">卖出↓</a></td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <div class="empty">暂无持仓，先在上面买一点吧。</div>
+    {% endif %}
+
+    <h2 style="margin-top:28px">⚙️ 账户管理</h2>
+    <form method="post" action="/sim/reset" style="display:inline">
+      <button class="danger" type="submit"
+              onclick="return confirm('确定重置模拟盘？将清空所有持仓和成交记录，资金回到 10 万。')">重置账户</button>
+    </form>
+    <div class="hint">数据保存在服务器端 sim_data.json，重启不丢。</div>
+  </div>
+</body>
+</html>
